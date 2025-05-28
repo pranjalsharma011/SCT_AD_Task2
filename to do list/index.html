@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TaskNest - To-Do List App</title>
+<style>
+  /* Reset & base */
+  * {
+    box-sizing: border-box;
+  }
+  body, html {
+    margin: 0; padding: 0; height: 100%;
+    background: #121212;
+    color: #eee;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  /* Container */
+  #app {
+    position: relative;
+    z-index: 10;
+    width: 90vw;
+    max-width: 700px;
+    background: rgba(28, 28, 28, 0.85);
+    border-radius: 12px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    padding: 30px 40px 40px 40px;
+    animation: floating 8s ease-in-out infinite;
+  }
+  @keyframes floating {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+  h1 {
+    margin: 0 0 20px 0;
+    font-weight: 700;
+    font-size: 2.4rem;
+    color: #f0a500;
+    text-align: center;
+    text-shadow: 0 0 6px #f0a500cc;
+    user-select: none;
+  }
+  /* Input & Button */
+  .input-group {
+    display: flex;
+    margin-bottom: 20px;
+  }
+  #new-task-input {
+    flex: 1;
+    background: #222;
+    border: none;
+    padding: 12px 14px;
+    color: #ddd;
+    font-size: 1rem;
+    border-radius: 6px 0 0 6px;
+    outline-offset: 1px;
+    transition: box-shadow 0.2s ease;
+  }
+  #new-task-input:focus {
+    box-shadow: 0 0 8px #f0a500;
+    outline: none;
+  }
+  #add-task-btn {
+    background: #f0a500;
+    border: none;
+    padding: 12px 20px;
+    font-weight: 700;
+    color: #121212;
+    cursor: pointer;
+    border-radius: 0 6px 6px 0;
+    transition: background 0.3s ease;
+  }
+  #add-task-btn:hover {
+    background: #cf9000;
+  }
+  /* Task List */
+  #task-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  .task-item {
+    background: #1f1f1f;
+    margin-bottom: 12px;
+    border-radius: 8px;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 0 8px #00000070;
+    transition: background 0.3s ease;
+  }
+  .task-item:hover {
+    background: #2a2a2a;
+  }
+  .task-content {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: 12px;
+  }
+  .task-text {
+    color: #ddd;
+    font-size: 1rem;
+    user-select: none;
+  }
+  .task-text.editing {
+    user-select: text;
+  }
+  input.edit-input {
+    font-size: 1rem;
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: none;
+    outline-offset: 1px;
+    outline: 2px solid #f0a500;
+    background: #333;
+    color: #eee;
+  }
+  input.task-checkbox {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: #f0a500;
+  }
+  /* Done task style */
+  .task-text.done {
+    text-decoration: line-through;
+    color: #777;
+  }
+  /* Buttons */
+  .task-buttons {
+    display: flex;
+    gap: 12px;
+    margin-left: 20px;
+  }
+  button.task-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #f0a500;
+    font-size: 1.2rem;
+    padding: 6px;
+    border-radius: 6px;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+  }
+  button.task-btn:hover {
+    background: #f0a50022;
+  }
+  button.task-btn:focus {
+    outline: 2px solid #f0a500;
+    outline-offset: 2px;
+  }
+  /* Icons */
+  svg {
+    width: 20px;
+    height: 20px;
+  }
+  /* Footer */
+  #footer {
+    text-align: center;
+    margin-top: 30px;
+    color: #777;
+    font-size: 0.875rem;
+    user-select: none;
+  }
+  /* Particle Canvas */
+  #particle-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+    pointer-events: none;
+    background: #121212;
+  }
+</style>
+</head>
+<body>
+<canvas id="particle-canvas"></canvas>
+
+<div id="app" role="main" aria-label="To-Do List Application">
+  <h1>TaskNest</h1>
+  <div class="input-group">
+    <input type="text" id="new-task-input" placeholder="Add new task..." aria-label="Add new task" />
+    <button id="add-task-btn" aria-label="Add Task">Add</button>
+  </div>
+  <ul id="task-list" aria-live="polite" aria-relevant="additions removals"></ul>
+  <div id="footer">Double click task text to edit. Press Enter or click outside to save.</div>
+</div>
+
+<script>
+  (() => {
+    // Elements
+    const taskInput = document.getElementById('new-task-input');
+    const addTaskBtn = document.getElementById('add-task-btn');
+    const taskList = document.getElementById('task-list');
+
+    // Task array in memory
+    let tasks = [];
+
+    // Save & load tasks from localStorage
+    function saveTasks() {
+      localStorage.setItem('todoTasks', JSON.stringify(tasks));
+    }
+    function loadTasks() {
+      const saved = localStorage.getItem('todoTasks');
+      if (saved) {
+        tasks = JSON.parse(saved);
+        tasks.forEach(task => addTaskElement(task));
+      }
+    }
+
+    // Create a new task object
+    function createTaskObject(text) {
+      return {
+        id: crypto.randomUUID ? crypto.randomUUID() : Date.now() + Math.random(),
+        text,
+        done: false,
+      };
+    }
+
+    // Add a task to the DOM
+    function addTaskElement(task) {
+      const li = document.createElement('li');
+      li.className = 'task-item';
+      li.dataset.id = task.id;
+
+      // Task content wrapper (checkbox + text)
+      const contentDiv = document.createElement('div');
+      contentDiv.className = 'task-content';
+
+      // Checkbox for done status
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'task-checkbox';
+      checkbox.checked = task.done;
+      checkbox.setAttribute('aria-label', 'Mark task done');
+      contentDiv.appendChild(checkbox);
+
+      // Task text display + edit input
+      const span = document.createElement('span');
+      span.className = 'task-text';
+      if (task.done) {
+        span.classList.add('done');
+      }
+      span.textContent = task.text;
+      span.tabIndex = 0;
+      span.setAttribute('role', 'textbox');
+      span.setAttribute('aria-label', 'Task: ' + task.text);
+      contentDiv.appendChild(span);
+
+      li.appendChild(contentDiv);
+
+      // On checkbox change update done state
+      checkbox.addEventListener('change', () => {
+        task.done = checkbox.checked;
+        if (task.done) {
+          span.classList.add('done');
+        } else {
+          span.classList.remove('done');
+        }
+        saveTasks();
+      });
+
+      // On double click, enable editing
+      function enableEdit() {
+        span.contentEditable = false;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'edit-input';
+        input.value = span.textContent;
+        li.replaceChild(input, contentDiv);
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+
+        // Save edit on enter or blur
+        function saveEdit() {
+          const newVal = input.value.trim();
+          if (newVal) {
+            span.textContent = newVal;
+            const taskIdx = tasks.findIndex(t => t.id === task.id);
+            if (taskIdx > -1) {
+              tasks[taskIdx].text = newVal;
+              saveTasks();
+            }
+        }
+        li.replaceChild(contentDiv, input);
+        li.dataset.id = task.id; // Ensure ID stays after edit
+          span.setAttribute('aria-label', 'Task: ' + span.textContent);
+          span.classList.remove('editing');
+          cleanup();
+        }
+        function onKeyDown(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            saveEdit();
+          } else if (e.key === 'Escape') {
+            li.replaceChild(contentDiv, input);
+            cleanup();
+          }
+        }
+        function onBlur() {
+          saveEdit();
+        }
+        function cleanup() {
+          input.removeEventListener('keydown', onKeyDown);
+          input.removeEventListener('blur', onBlur);
+        }
+        input.addEventListener('keydown', onKeyDown);
+        input.addEventListener('blur', onBlur);
+        span.classList.add('editing');
+      }
+      span.addEventListener('dblclick', enableEdit);
+      span.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          enableEdit();
+        }
+      });
+
+      // Buttons container
+      const btns = document.createElement('div');
+      btns.className = 'task-buttons';
+
+      // Edit button
+      const editBtn = document.createElement('button');
+      editBtn.className = 'task-btn';
+      editBtn.setAttribute('aria-label', 'Edit Task');
+      editBtn.innerHTML = `<svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1.003 1.003 0 0 0 0-1.42l-2.34-2.34a1.003 1.003 0 0 0-1.42 0l-1.83 1.83 3.75 3.75 1.84-1.82z"/></svg>`;
+      editBtn.onclick = () => {
+        span.dispatchEvent(new Event('dblclick'));
+      };
+
+      // Delete button with reliable event listener and proper li removal
+      const delBtn = document.createElement('button');
+      delBtn.className = 'task-btn';
+      delBtn.setAttribute('aria-label', 'Delete Task');
+      delBtn.innerHTML = `<svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-4.5l-1-1z"/></svg>`;
+
+      delBtn.addEventListener('click', (e) => {
+        if (confirm('Delete this task?')) {
+          const liToRemove = e.currentTarget.closest('li.task-item');
+          if (!liToRemove) return;
+          const idToRemove = liToRemove.dataset.id;
+          tasks = tasks.filter(t => t.id !== idToRemove);
+          saveTasks();
+          liToRemove.remove();
+        }
+      });
+
+      btns.appendChild(editBtn);
+      btns.appendChild(delBtn);
+      li.appendChild(btns);
+
+      taskList.appendChild(li);
+    }
+
+    // Add task handler
+    function addTask() {
+      const text = taskInput.value.trim();
+      if (!text) return;
+      const newTask = createTaskObject(text);
+      tasks.push(newTask);
+      addTaskElement(newTask);
+      saveTasks();
+      taskInput.value = '';
+      taskInput.focus();
+    }
+
+    // Event bindings
+    addTaskBtn.addEventListener('click', addTask);
+    taskInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        addTask();
+      }
+    });
+
+    loadTasks();
+
+    // Particle background code - faster movement
+    const canvas = document.getElementById('particle-canvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+    let particles = [];
+    const particleCount = 80;
+
+    function random(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function Particle() {
+      this.x = random(0, width);
+      this.y = random(0, height);
+      this.radius = random(1, 3);
+      this.speedX = random(-0.5, 0.5);
+      this.speedY = random(-0.5, 0.5);
+      this.opacity = random(0.1, 0.6);
+    }
+
+    Particle.prototype.draw = function () {
+      ctx.beginPath();
+      ctx.fillStyle = `rgba(240, 165, 0, ${this.opacity})`;
+      ctx.shadowColor = 'rgba(240,165,0,0.7)';
+      ctx.shadowBlur = 4;
+      ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
+      ctx.fill();
+    };
+
+    Particle.prototype.update = function () {
+      this.x += this.speedX;
+      this.y += this.speedY;
+
+      if (this.x < 0 || this.x > width) this.speedX *= -1;
+      if (this.y < 0 || this.y > height) this.speedY *= -1;
+    };
+
+    function createParticles() {
+      particles = [];
+      for (let i = 0; i < particleCount; i++) {
+        particles.push(new Particle());
+      }
+    }
+
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width;
+      canvas.height = height;
+      createParticles();
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, width, height);
+      particles.forEach(p => {
+        p.update();
+        p.draw();
+      });
+      for(let i=0; i < particles.length; i++) {
+        for(let j=i+1; j < particles.length; j++) {
+          let dx = particles[i].x - particles[j].x;
+          let dy = particles[i].y - particles[j].y;
+          let dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < 100) {
+            ctx.beginPath();
+            ctx.strokeStyle = `rgba(240, 165, 0, ${(100 - dist)/150})`;
+            ctx.lineWidth = 1;
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+    animate();
+
+  })();
+</script>
+</body>
+</html>
+
